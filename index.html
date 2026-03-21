@@ -161,47 +161,16 @@ button {
 </div>
 
 <script>
-<script>
 const PI_URL = "pi.txt";
 
 let lastResult = "";
 let debounceTimer;
 let currentIndex = -1;
 let matchElements = [];
-let MAX_DIGITS = 0;
 
-async function determineMaxDigits() {
-  try {
-    const response = await fetch(PI_URL);
-    const text = await response.text();
-    MAX_DIGITS = text.startsWith("3.") ? text.length - 2 : text.length;
-    document.getElementById("status").innerText = 
-      `Max digits available: ${MAX_DIGITS.toLocaleString()}`;
-  } catch (e) {
-    document.getElementById("status").innerText = "Failed to load pi file.";
-  }
-}
-
-document.addEventListener("DOMContentLoaded", determineMaxDigits);
-
-const startInput = document.getElementById("start");
-const endInput = document.getElementById("end");
-const patternInput = document.getElementById("pattern");
-
-[startInput, endInput].forEach(input => {
-  input.addEventListener("input", () => {
-    // Clamp the number to max digits
-    if (MAX_DIGITS > 0) {
-      let val = parseInt(input.value);
-      if (!isNaN(val) && val > MAX_DIGITS) {
-        input.value = MAX_DIGITS;
-      }
-    }
-    triggerUpdate();
-  });
-});
-
-patternInput.addEventListener("input", applyHighlight);
+document.getElementById("start").addEventListener("input", triggerUpdate);
+document.getElementById("end").addEventListener("input", triggerUpdate);
+document.getElementById("pattern").addEventListener("input", applyHighlight);
 
 function triggerUpdate() {
   clearTimeout(debounceTimer);
@@ -209,8 +178,8 @@ function triggerUpdate() {
 }
 
 async function loadPi() {
-  let start = parseInt(startInput.value);
-  let end = parseInt(endInput.value);
+  const start = parseInt(document.getElementById("start").value);
+  const end = parseInt(document.getElementById("end").value);
 
   if (isNaN(start) || isNaN(end) || start < 1 || end < start) {
     document.getElementById("output").innerText = "Enter valid range";
@@ -231,7 +200,13 @@ async function loadPi() {
 
     const text = await response.text();
 
-    let result = (start === 1 ? "3." : "") + text;
+    let result;
+
+    if (start === 1) {
+      result = "3." + text;
+    } else {
+      result = text;
+    }
 
     lastResult = result;
 
@@ -244,16 +219,6 @@ async function loadPi() {
     document.getElementById("status").innerText =
       "Error (Range may not be supported)";
   }
-}
-
-function updateInfo(start, end) {
-  const digits = end - start + 1;
-
-  document.getElementById("counter").innerText =
-    `Digits: ${digits.toLocaleString()}`;
-
-  document.getElementById("range").innerText =
-    `Range: ${start.toLocaleString()}–${end.toLocaleString()}${MAX_DIGITS > 0 ? ` (Max: ${MAX_DIGITS.toLocaleString()})` : ""}`;
 }
 
 function applyHighlight() {
