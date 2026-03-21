@@ -271,11 +271,53 @@ function applyHighlight() {
 }
 
 function findNext() {
-  if (matchElements.length === 0) return;
+  const pattern = document.getElementById("pattern").value;
+  if (!pattern || !fullResult) return;
 
-  if (currentIndex >= 0) {
-    matchElements[currentIndex].classList.remove("active");
+  const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(escaped, "g");
+
+  let match;
+  let matches = [];
+
+  while ((match = regex.exec(fullResult)) !== null) {
+    matches.push(match.index);
   }
+
+  if (matches.length === 0) return;
+
+  currentIndex = (currentIndex + 1) % matches.length;
+
+  const matchPos = matches[currentIndex];
+
+  // 🔥 Center view around match
+  const start = Math.max(0, matchPos - 5000);
+  const end = Math.min(fullResult.length, matchPos + 5000);
+
+  visibleResult = fullResult.slice(start, end);
+
+  // Highlight again
+  const highlighted = visibleResult.replace(regex, m =>
+    `<span class="highlight">${m}</span>`
+  );
+
+  const output = document.getElementById("output");
+  output.innerHTML = highlighted;
+
+  matchElements = document.querySelectorAll(".highlight");
+
+  // Scroll to the correct match in this chunk
+  if (matchElements.length > 0) {
+    matchElements.forEach(el => el.classList.remove("active"));
+
+    const active = matchElements[0];
+    active.classList.add("active");
+
+    setTimeout(() => {
+      active.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
+  }
+}
 
   currentIndex = (currentIndex + 1) % matchElements.length;
 
