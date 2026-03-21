@@ -162,8 +162,6 @@ button {
 
 <script>
 const PI_URL = "pi.txt";
-const worker = new Worker("worker.js");
-let globalMatches = [];
 
 let fullResult = "";
 let visibleResult = "";
@@ -232,6 +230,7 @@ function applyHighlight() {
 
   if (!fullResult) return;
 
+  // LIMIT RENDER SIZE
   if (fullResult.length > MAX_RENDER) {
     visibleResult =
       fullResult.slice(0, MAX_RENDER) +
@@ -249,15 +248,16 @@ function applyHighlight() {
   const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const regex = new RegExp(escaped, "g");
 
-  // 🔥 Send to worker (ASYNC)
-  worker.postMessage({
-    text: fullResult,
-    pattern: pattern
-  });
+  const matches = fullResult.match(regex);
+  const count = matches ? matches.length : 0;
 
-  document.getElementById("status").innerText = "Searching...";
+  const digitsTotal = fullResult.replace(".", "").length;
+  const digitsCovered = count * pattern.length;
 
-  // Highlight ONLY visible part (fast)
+  const percent = digitsTotal > 0
+    ? ((digitsCovered / digitsTotal) * 100).toFixed(3)
+    : 0;
+
   const highlighted = visibleResult.replace(regex, match =>
     `<span class="highlight">${match}</span>`
   );
@@ -265,7 +265,7 @@ function applyHighlight() {
   output.innerHTML = highlighted;
 
   matchElements = document.querySelectorAll(".highlight");
-}
+
   document.getElementById("status").innerText =
     `${count.toLocaleString()} match${count !== 1 ? "es" : ""} • ${digitsCovered.toLocaleString()} out of ${digitsTotal.toLocaleString()} (${percent}%)`;
 }
@@ -274,25 +274,29 @@ function findNext() {
   const pattern = document.getElementById("pattern").value;
   if (!pattern || !fullResult) return;
 
-  if (!globalMatches || globalMatches.length === 0) {
-    document.getElementById("status").innerText = "No matches";
-    return;
-  }
-
-  currentIndex = (currentIndex + 1) % globalMatches.length;
-
-  const matchPos = globalMatches[currentIndex];
-
   const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const regex = new RegExp(escaped, "g");
 
-  // 🔥 Center around match
+  let match;
+  let matches = [];
+
+  while ((match = regex.exec(fullResult)) !== null) {
+    matches.push(match.index);
+  }
+
+  if (matches.length === 0) return;
+
+  currentIndex = (currentIndex + 1) % matches.length;
+
+  const matchPos = matches[currentIndex];
+
+  // 🔥 Center view around match
   const start = Math.max(0, matchPos - 5000);
   const end = Math.min(fullResult.length, matchPos + 5000);
 
   visibleResult = fullResult.slice(start, end);
 
-  // Highlight visible chunk
+  // Highlight again
   const highlighted = visibleResult.replace(regex, m =>
     `<span class="highlight">${m}</span>`
   );
@@ -302,31 +306,17 @@ function findNext() {
 
   matchElements = document.querySelectorAll(".highlight");
 
-  // 🔥 Activate correct match (important fix)
+  // Scroll to the correct match in this chunk
   if (matchElements.length > 0) {
     matchElements.forEach(el => el.classList.remove("active"));
 
-    // Find the correct one inside the chunk
-    let closest = 0;
-    for (let i = 0; i < matchElements.length; i++) {
-      const pos = visibleResult.indexOf(matchElements[i].textContent);
-      if (pos >= (matchPos - start)) {
-        closest = i;
-        break;
-      }
-    }
-
-    const active = matchElements[closest];
+    const active = matchElements[0];
     active.classList.add("active");
 
     setTimeout(() => {
       active.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 50);
   }
-
-  // Optional: show match index
-  document.getElementById("status").innerText =
-    `Match ${(currentIndex + 1).toLocaleString()} / ${globalMatches.length.toLocaleString()}`;
 }
 
 function updateInfo(start, end) {
@@ -357,22 +347,6 @@ function copyText() {
     }, 900);
   });
 }
-
-worker.onmessage = function(e) {
-  globalMatches = e.data.matches;
-
-  const count = globalMatches.length;
-
-  const digitsTotal = fullResult.replace(".", "").length;
-  const digitsCovered = count * document.getElementById("pattern").value.length;
-
-  const percent = digitsTotal > 0
-    ? ((digitsCovered / digitsTotal) * 100).toFixed(3)
-    : 0;
-
-  document.getElementById("status").innerText =
-    `${count.toLocaleString()} match${count !== 1 ? "es" : ""} • ${digitsCovered.toLocaleString()} out of ${digitsTotal.toLocaleString()} (${percent}%)`;
-};
 
 </script>
 
