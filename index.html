@@ -161,21 +161,23 @@ button {
 </div>
 
 <script>
-<script>
-const PI_URL = "pi.txt";
+const PI_URL = "https://gist.githubusercontent.com/stupid-genius/51f6bbb021dbce46cdef9b1f08eb3561/raw/8b5dc98fa123966778f78677ad56be7236b6e863/pidigits";
 
 let lastResult = "";
 let debounceTimer;
 let currentIndex = -1;
 let matchElements = [];
-let MAX_DIGITS = 0; // Will be determined automatically
+let MAX_DIGITS = 0; 
+
+const startInput = document.getElementById("start");
+const endInput = document.getElementById("end");
+const patternInput = document.getElementById("pattern");
 
 // Determine max digits on load
 async function determineMaxDigits() {
   try {
     const response = await fetch(PI_URL);
     const text = await response.text();
-    // Exclude the decimal "3." if present
     MAX_DIGITS = text.startsWith("3.") ? text.length - 2 : text.length;
     document.getElementById("status").innerText = 
       `Max digits available: ${MAX_DIGITS.toLocaleString()}`;
@@ -186,19 +188,23 @@ async function determineMaxDigits() {
 
 document.addEventListener("DOMContentLoaded", determineMaxDigits);
 
-const startInput = document.getElementById("start");
-const endInput = document.getElementById("end");
-const patternInput = document.getElementById("pattern");
-
+// Clamp start/end inputs to max and ensure start <= end
 [startInput, endInput].forEach(input => {
   input.addEventListener("input", () => {
-    // Clamp the number to max digits
+    let start = parseInt(startInput.value) || 1;
+    let end = parseInt(endInput.value) || start;
+
     if (MAX_DIGITS > 0) {
-      let val = parseInt(input.value);
-      if (!isNaN(val) && val > MAX_DIGITS) {
-        input.value = MAX_DIGITS;
-      }
+      if (start > MAX_DIGITS) start = MAX_DIGITS;
+      if (end > MAX_DIGITS) end = MAX_DIGITS;
     }
+
+    if (start > end) startInput.value = end;
+    else startInput.value = start;
+
+    if (end < start) endInput.value = start;
+    else endInput.value = end;
+
     triggerUpdate();
   });
 });
@@ -226,42 +232,31 @@ async function loadPi() {
     document.getElementById("status").innerText = "Loading...";
 
     const response = await fetch(PI_URL, {
-      headers: {
-        "Range": `bytes=${byteStart}-${byteEnd}`
-      }
+      headers: { "Range": `bytes=${byteStart}-${byteEnd}` }
     });
 
     const text = await response.text();
-
-    let result = (start === 1 ? "3." : "") + text;
-
-    lastResult = result;
+    lastResult = (start === 1 ? "3." : "") + text;
 
     updateInfo(start, end);
     document.getElementById("status").innerText = "Loaded";
 
     applyHighlight();
-
   } catch (e) {
-    document.getElementById("status").innerText =
-      "Error (Range may not be supported)";
+    document.getElementById("status").innerText = "Error (Range may not be supported)";
   }
 }
 
 function updateInfo(start, end) {
   const digits = end - start + 1;
-
-  document.getElementById("counter").innerText =
-    `Digits: ${digits.toLocaleString()}`;
-
+  document.getElementById("counter").innerText = `Digits: ${digits.toLocaleString()}`;
   document.getElementById("range").innerText =
     `Range: ${start.toLocaleString()}–${end.toLocaleString()}${MAX_DIGITS > 0 ? ` (Max: ${MAX_DIGITS.toLocaleString()})` : ""}`;
 }
 
 function applyHighlight() {
-  const pattern = document.getElementById("pattern").value;
+  const pattern = patternInput.value;
   const output = document.getElementById("output");
-
   currentIndex = -1;
   matchElements = [];
 
@@ -273,23 +268,14 @@ function applyHighlight() {
 
   const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const regex = new RegExp(escaped, "g");
-
   const matches = lastResult.match(regex);
   const count = matches ? matches.length : 0;
 
   const digitsTotal = lastResult.replace(".", "").length;
   const digitsCovered = count * pattern.length;
+  const percent = digitsTotal > 0 ? ((digitsCovered / digitsTotal) * 100).toFixed(3) : 0;
 
-  const percent = digitsTotal > 0
-    ? ((digitsCovered / digitsTotal) * 100).toFixed(3)
-    : 0;
-
-  const highlighted = lastResult.replace(regex, match =>
-    `<span class="highlight">${match}</span>`
-  );
-
-  output.innerHTML = highlighted;
-
+  output.innerHTML = lastResult.replace(regex, match => `<span class="highlight">${match}</span>`);
   matchElements = document.querySelectorAll(".highlight");
 
   document.getElementById("status").innerText =
@@ -299,10 +285,7 @@ function applyHighlight() {
 function findNext() {
   if (matchElements.length === 0) return;
 
-  if (currentIndex >= 0) {
-    matchElements[currentIndex].classList.remove("active");
-  }
-
+  if (currentIndex >= 0) matchElements[currentIndex].classList.remove("active");
   currentIndex = (currentIndex + 1) % matchElements.length;
 
   const el = matchElements[currentIndex];
@@ -310,26 +293,14 @@ function findNext() {
   el.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-function updateInfo(start, end) {
-  const digits = end - start + 1;
-
-  document.getElementById("counter").innerText =
-    `Digits: ${digits.toLocaleString()}`;
-
-  document.getElementById("range").innerText =
-    `Range: ${start.toLocaleString()}–${end.toLocaleString()}`;
-}
-
 function copyText() {
   if (!lastResult) return;
-
   const btn = document.querySelector(".copy-btn");
 
   navigator.clipboard.writeText(lastResult).then(() => {
     btn.classList.add("copied");
     const originalText = btn.innerText;
     btn.innerText = "Copied!";
-
     document.getElementById("status").innerText = "Copied!";
 
     setTimeout(() => {
