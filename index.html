@@ -319,13 +319,6 @@ function findNext() {
   }
 }
 
-  currentIndex = (currentIndex + 1) % matchElements.length;
-
-  const el = matchElements[currentIndex];
-  el.classList.add("active");
-  el.scrollIntoView({ behavior: "smooth", block: "center" });
-}
-
 function updateInfo(start, end) {
   const digits = end - start + 1;
 
