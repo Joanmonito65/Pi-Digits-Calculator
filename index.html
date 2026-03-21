@@ -78,6 +78,11 @@ input::placeholder {
   padding: 1px 2px;
 }
 
+.highlight.active {
+  background: red;
+  color: white;
+}
+
 button {
   width: 100%;
   padding: 14px;
@@ -93,8 +98,6 @@ button {
 
 .copy-btn {
   background: #10b981;
-  position: relative;
-  overflow: hidden;
 }
 
 .copy-btn:active {
@@ -104,6 +107,14 @@ button {
 .copy-btn.copied {
   background: #2563eb;
   transform: scale(1.05);
+}
+
+.find-btn {
+  width: auto;
+  padding: 6px 10px;
+  margin-top: 6px;
+  background: #ef4444;
+  font-size: 12px;
 }
 
 .info {
@@ -117,7 +128,7 @@ button {
 .status {
   margin-top: 6px;
   font-size: 12px;
-  opacity: 0.6;
+  opacity: 0.8;
 }
 </style>
 </head>
@@ -137,6 +148,7 @@ button {
   </div>
 
   <button class="copy-btn" onclick="copyText()">Copy</button>
+  <button class="find-btn" onclick="findNext()">Find Next</button>
 
   <div class="result" id="output">Type numbers to begin...</div>
 
@@ -153,6 +165,8 @@ const PI_URL = "https://gist.githubusercontent.com/stupid-genius/51f6bbb021dbce4
 
 let lastResult = "";
 let debounceTimer;
+let currentIndex = -1;
+let matchElements = [];
 
 document.getElementById("start").addEventListener("input", triggerUpdate);
 document.getElementById("end").addEventListener("input", triggerUpdate);
@@ -211,6 +225,9 @@ function applyHighlight() {
   const pattern = document.getElementById("pattern").value;
   const output = document.getElementById("output");
 
+  currentIndex = -1;
+  matchElements = [];
+
   if (!pattern) {
     output.innerText = lastResult;
     document.getElementById("status").innerText = "Loaded";
@@ -223,14 +240,37 @@ function applyHighlight() {
   const matches = lastResult.match(regex);
   const count = matches ? matches.length : 0;
 
+  const digitsTotal = lastResult.replace(".", "").length;
+  const digitsCovered = count * pattern.length;
+
+  const percent = digitsTotal > 0
+    ? ((digitsCovered / digitsTotal) * 100).toFixed(3)
+    : 0;
+
   const highlighted = lastResult.replace(regex, match =>
     `<span class="highlight">${match}</span>`
   );
 
   output.innerHTML = highlighted;
 
+  matchElements = document.querySelectorAll(".highlight");
+
   document.getElementById("status").innerText =
-    `Matches: ${count.toLocaleString()}`;
+    `${count.toLocaleString()} match${count !== 1 ? "es" : ""} • ${digitsCovered.toLocaleString()} out of ${digitsTotal.toLocaleString()} (${percent}%)`;
+}
+
+function findNext() {
+  if (matchElements.length === 0) return;
+
+  if (currentIndex >= 0) {
+    matchElements[currentIndex].classList.remove("active");
+  }
+
+  currentIndex = (currentIndex + 1) % matchElements.length;
+
+  const el = matchElements[currentIndex];
+  el.classList.add("active");
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 function updateInfo(start, end) {
