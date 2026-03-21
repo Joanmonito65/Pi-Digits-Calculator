@@ -161,7 +161,8 @@ button {
 </div>
 
 <script>
-const PI_URL = "https://gist.githubusercontent.com/stupid-genius/51f6bbb021dbce46cdef9b1f08eb3561/raw/8b5dc98fa123966778f78677ad56be7236b6e863/pidigits";
+<script>
+const PI_URL = "pi.txt";
 
 let lastResult = "";
 let debounceTimer;
@@ -185,9 +186,24 @@ async function determineMaxDigits() {
 
 document.addEventListener("DOMContentLoaded", determineMaxDigits);
 
-document.getElementById("start").addEventListener("input", triggerUpdate);
-document.getElementById("end").addEventListener("input", triggerUpdate);
-document.getElementById("pattern").addEventListener("input", applyHighlight);
+const startInput = document.getElementById("start");
+const endInput = document.getElementById("end");
+const patternInput = document.getElementById("pattern");
+
+[startInput, endInput].forEach(input => {
+  input.addEventListener("input", () => {
+    // Clamp the number to max digits
+    if (MAX_DIGITS > 0) {
+      let val = parseInt(input.value);
+      if (!isNaN(val) && val > MAX_DIGITS) {
+        input.value = MAX_DIGITS;
+      }
+    }
+    triggerUpdate();
+  });
+});
+
+patternInput.addEventListener("input", applyHighlight);
 
 function triggerUpdate() {
   clearTimeout(debounceTimer);
@@ -195,18 +211,11 @@ function triggerUpdate() {
 }
 
 async function loadPi() {
-  let start = parseInt(document.getElementById("start").value);
-  let end = parseInt(document.getElementById("end").value);
+  let start = parseInt(startInput.value);
+  let end = parseInt(endInput.value);
 
   if (isNaN(start) || isNaN(end) || start < 1 || end < start) {
     document.getElementById("output").innerText = "Enter valid range";
-    return;
-  }
-
-  if (MAX_DIGITS > 0 && end > MAX_DIGITS) {
-    document.getElementById("output").innerText = 
-      `Max digits available: ${MAX_DIGITS.toLocaleString()}. Please choose a smaller end value.`;
-    document.getElementById("status").innerText = "Exceeded maximum digits";
     return;
   }
 
