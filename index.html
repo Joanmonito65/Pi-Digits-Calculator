@@ -232,7 +232,6 @@ function applyHighlight() {
 
   if (!fullResult) return;
 
-  // LIMIT RENDER SIZE
   if (fullResult.length > MAX_RENDER) {
     visibleResult =
       fullResult.slice(0, MAX_RENDER) +
@@ -250,21 +249,15 @@ function applyHighlight() {
   const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const regex = new RegExp(escaped, "g");
 
-worker.postMessage({
-  text: fullResult,
-  pattern: pattern
-});
+  // 🔥 Send to worker (ASYNC)
+  worker.postMessage({
+    text: fullResult,
+    pattern: pattern
+  });
 
-document.getElementById("status").innerText = "Searching...";
-  const count = matches ? matches.length : 0;
+  document.getElementById("status").innerText = "Searching...";
 
-  const digitsTotal = fullResult.replace(".", "").length;
-  const digitsCovered = count * pattern.length;
-
-  const percent = digitsTotal > 0
-    ? ((digitsCovered / digitsTotal) * 100).toFixed(3)
-    : 0;
-
+  // Highlight ONLY visible part (fast)
   const highlighted = visibleResult.replace(regex, match =>
     `<span class="highlight">${match}</span>`
   );
@@ -272,7 +265,7 @@ document.getElementById("status").innerText = "Searching...";
   output.innerHTML = highlighted;
 
   matchElements = document.querySelectorAll(".highlight");
-
+}
   document.getElementById("status").innerText =
     `${count.toLocaleString()} match${count !== 1 ? "es" : ""} • ${digitsCovered.toLocaleString()} out of ${digitsTotal.toLocaleString()} (${percent}%)`;
 }
@@ -334,24 +327,6 @@ function findNext() {
   // Optional: show match index
   document.getElementById("status").innerText =
     `Match ${(currentIndex + 1).toLocaleString()} / ${globalMatches.length.toLocaleString()}`;
-}
-
-  const output = document.getElementById("output");
-  output.innerHTML = highlighted;
-
-  matchElements = document.querySelectorAll(".highlight");
-
-  // Scroll to the correct match in this chunk
-  if (matchElements.length > 0) {
-    matchElements.forEach(el => el.classList.remove("active"));
-
-    const active = matchElements[0];
-    active.classList.add("active");
-
-    setTimeout(() => {
-      active.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 50);
-  }
 }
 
 function updateInfo(start, end) {
