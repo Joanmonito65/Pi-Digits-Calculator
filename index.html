@@ -163,10 +163,13 @@ button {
 <script>
 const PI_URL = "pi.txt";
 
-let lastResult = "";
+let fullResult = "";
+let visibleResult = "";
 let debounceTimer;
 let currentIndex = -1;
 let matchElements = [];
+
+const MAX_RENDER = 10000;
 
 document.getElementById("start").addEventListener("input", triggerUpdate);
 document.getElementById("end").addEventListener("input", triggerUpdate);
@@ -200,17 +203,14 @@ async function loadPi() {
 
     const text = await response.text();
 
-    let result;
-
     if (start === 1) {
-      result = "3." + text;
+      fullResult = "3." + text;
     } else {
-      result = text;
+      fullResult = text;
     }
 
-    lastResult = result;
-
     updateInfo(start, end);
+
     document.getElementById("status").innerText = "Loaded";
 
     applyHighlight();
@@ -228,8 +228,19 @@ function applyHighlight() {
   currentIndex = -1;
   matchElements = [];
 
+  if (!fullResult) return;
+
+  // LIMIT RENDER SIZE
+  if (fullResult.length > MAX_RENDER) {
+    visibleResult =
+      fullResult.slice(0, MAX_RENDER) +
+      "\n\n...[Showing first " + MAX_RENDER.toLocaleString() + " digits]";
+  } else {
+    visibleResult = fullResult;
+  }
+
   if (!pattern) {
-    output.innerText = lastResult;
+    output.textContent = visibleResult;
     document.getElementById("status").innerText = "Loaded";
     return;
   }
@@ -237,17 +248,17 @@ function applyHighlight() {
   const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const regex = new RegExp(escaped, "g");
 
-  const matches = lastResult.match(regex);
+  const matches = fullResult.match(regex);
   const count = matches ? matches.length : 0;
 
-  const digitsTotal = lastResult.replace(".", "").length;
+  const digitsTotal = fullResult.replace(".", "").length;
   const digitsCovered = count * pattern.length;
 
   const percent = digitsTotal > 0
     ? ((digitsCovered / digitsTotal) * 100).toFixed(3)
     : 0;
 
-  const highlighted = lastResult.replace(regex, match =>
+  const highlighted = visibleResult.replace(regex, match =>
     `<span class="highlight">${match}</span>`
   );
 
@@ -284,11 +295,11 @@ function updateInfo(start, end) {
 }
 
 function copyText() {
-  if (!lastResult) return;
+  if (!fullResult) return;
 
   const btn = document.querySelector(".copy-btn");
 
-  navigator.clipboard.writeText(lastResult).then(() => {
+  navigator.clipboard.writeText(fullResult).then(() => {
     btn.classList.add("copied");
     const originalText = btn.innerText;
     btn.innerText = "Copied!";
@@ -301,6 +312,7 @@ function copyText() {
     }, 900);
   });
 }
+
 </script>
 
 </body>
