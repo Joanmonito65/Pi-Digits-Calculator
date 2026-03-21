@@ -71,6 +71,13 @@ input::placeholder {
   font-size: 15px;
 }
 
+.highlight {
+  background: yellow;
+  color: black;
+  border-radius: 4px;
+  padding: 1px 2px;
+}
+
 button {
   width: 100%;
   padding: 14px;
@@ -125,6 +132,10 @@ button {
     <input id="end" type="number" placeholder="End">
   </div>
 
+  <div class="inputs" style="margin-top:8px;">
+    <input id="pattern" type="text" placeholder="Highlight pattern">
+  </div>
+
   <button class="copy-btn" onclick="copyText()">Copy</button>
 
   <div class="result" id="output">Type numbers to begin...</div>
@@ -145,6 +156,7 @@ let debounceTimer;
 
 document.getElementById("start").addEventListener("input", triggerUpdate);
 document.getElementById("end").addEventListener("input", triggerUpdate);
+document.getElementById("pattern").addEventListener("input", applyHighlight);
 
 function triggerUpdate() {
   clearTimeout(debounceTimer);
@@ -183,16 +195,42 @@ async function loadPi() {
     }
 
     lastResult = result;
-    document.getElementById("output").innerText = result;
 
     updateInfo(start, end);
-
     document.getElementById("status").innerText = "Loaded";
+
+    applyHighlight();
 
   } catch (e) {
     document.getElementById("status").innerText =
       "Error (Range may not be supported)";
   }
+}
+
+function applyHighlight() {
+  const pattern = document.getElementById("pattern").value;
+  const output = document.getElementById("output");
+
+  if (!pattern) {
+    output.innerText = lastResult;
+    document.getElementById("status").innerText = "Loaded";
+    return;
+  }
+
+  const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(escaped, "g");
+
+  const matches = lastResult.match(regex);
+  const count = matches ? matches.length : 0;
+
+  const highlighted = lastResult.replace(regex, match =>
+    `<span class="highlight">${match}</span>`
+  );
+
+  output.innerHTML = highlighted;
+
+  document.getElementById("status").innerText =
+    `Matches: ${count.toLocaleString()}`;
 }
 
 function updateInfo(start, end) {
@@ -212,7 +250,6 @@ function copyText() {
 
   navigator.clipboard.writeText(lastResult).then(() => {
     btn.classList.add("copied");
-
     const originalText = btn.innerText;
     btn.innerText = "Copied!";
 
