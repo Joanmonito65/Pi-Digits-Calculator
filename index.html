@@ -4,9 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pi Digits Calculator</title>
-<style>
-* { box-sizing: border-box; }
 
+<style>
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;
@@ -49,45 +48,34 @@ input {
   color: white;
 }
 
-input::placeholder { color: rgba(255,255,255,0.5); }
+input::placeholder {
+  color: rgba(255,255,255,0.5);
+}
 
 @media (max-width: 480px) {
-  .inputs { flex-direction: column; }
+  .inputs {
+    flex-direction: column;
+  }
 }
 
-/* Virtualized scroll container */
-.result-wrap {
+.result {
   margin-top: 15px;
   background: black;
-  border-radius: 12px;
-  box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
-  height: 220px;
-  overflow-y: auto;
-  position: relative;
-}
-
-/* Spacer that sets total scroll height */
-#scroll-spacer {
-  width: 1px;
-  pointer-events: none;
-}
-
-/* Visible render window — absolutely positioned */
-#output {
-  position: absolute;
-  top: 0; left: 0; right: 0;
   padding: 14px;
+  border-radius: 12px;
   font-family: monospace;
-  font-size: 15px;
+  max-height: 220px;
+  overflow-y: auto;
   word-break: break-all;
-  white-space: pre-wrap;
-  will-change: transform;
+  box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+  font-size: 15px;
 }
 
 .highlight {
   background: yellow;
   color: black;
-  border-radius: 3px;
+  border-radius: 4px;
+  padding: 1px 2px;
 }
 
 .highlight.active {
@@ -108,9 +96,18 @@ button {
   transition: all 0.25s ease;
 }
 
-.copy-btn { background: #10b981; }
-.copy-btn:active { transform: scale(0.96); }
-.copy-btn.copied { background: #2563eb; transform: scale(1.05); }
+.copy-btn {
+  background: #10b981;
+}
+
+.copy-btn:active {
+  transform: scale(0.96);
+}
+
+.copy-btn.copied {
+  background: #2563eb;
+  transform: scale(1.05);
+}
 
 .find-btn {
   width: auto;
@@ -133,31 +130,17 @@ button {
   font-size: 12px;
   opacity: 0.8;
 }
-
-.progress-bar {
-  height: 3px;
-  background: rgba(255,255,255,0.1);
-  border-radius: 2px;
-  margin-top: 8px;
-  overflow: hidden;
-}
-
-#progress-fill {
-  height: 100%;
-  background: #3b82f6;
-  width: 0%;
-  transition: width 0.2s ease;
-}
 </style>
 </head>
 
 <body>
+
 <div class="container">
   <h1>π Digits Calculator</h1>
 
   <div class="inputs">
     <input id="start" type="number" placeholder="Start">
-    <input id="end"   type="number" placeholder="End">
+    <input id="end" type="number" placeholder="End">
   </div>
 
   <div class="inputs" style="margin-top:8px;">
@@ -167,325 +150,158 @@ button {
   <button class="copy-btn" onclick="copyText()">Copy</button>
   <button class="find-btn" onclick="findNext()">Find Next</button>
 
-  <div class="result-wrap" id="result-wrap">
-    <div id="scroll-spacer"></div>
-    <div id="output">Type numbers to begin...</div>
-  </div>
-
-  <div class="progress-bar"><div id="progress-fill"></div></div>
+  <div class="result" id="output">Type numbers to begin...</div>
 
   <div class="info">
     <div id="counter">Digits: 0</div>
     <div id="range">Range: -</div>
   </div>
+
   <div class="status" id="status"></div>
 </div>
 
 <script>
-// ─── Config ────────────────────────────────────────────────────────────────
-const PI_URL       = "pi.txt";
-const CHUNK_SIZE   = 2000;   // chars per virtual row
-const OVERSCAN     = 3;      // extra rows above/below viewport
-const LINE_HEIGHT  = 21;     // px — approximate monospace line height at 15px
+const PI_URL = "pi.txt";
 
-// ─── State ─────────────────────────────────────────────────────────────────
-let lastResult      = "";          // raw pi string
-let matchRanges     = [];          // [{start, end}] absolute char indices
-let currentMatch    = -1;
-let loadDebounce, hlDebounce;
+let lastResult = "";
+let debounceTimer;
+let currentIndex = -1;
+let matchElements = [];
 
-// Virtual-scroll state
-const wrap   = document.getElementById("result-wrap");
-const output = document.getElementById("output");
-const spacer = document.getElementById("scroll-spacer");
+document.getElementById("start").addEventListener("input", triggerUpdate);
+document.getElementById("end").addEventListener("input", triggerUpdate);
+document.getElementById("pattern").addEventListener("input", applyHighlight);
 
-let totalRows    = 0;
-let rowCache     = [];   // pre-split rows of CHUNK_SIZE chars
-let rowOffsets   = [];   // cumulative char offset for each row
+function triggerUpdate() {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(loadPi, 200);
+}
 
-// ─── Event wiring ──────────────────────────────────────────────────────────
-document.getElementById("start").addEventListener("input", () => {
-  clearTimeout(loadDebounce);
-  loadDebounce = setTimeout(loadPi, 250);
-});
-document.getElementById("end").addEventListener("input", () => {
-  clearTimeout(loadDebounce);
-  loadDebounce = setTimeout(loadPi, 250);
-});
-document.getElementById("pattern").addEventListener("input", () => {
-  clearTimeout(hlDebounce);
-  hlDebounce = setTimeout(rebuildHighlights, 180);
-});
-wrap.addEventListener("scroll", () => requestAnimationFrame(renderVisible), { passive: true });
-
-// ─── Load Pi ───────────────────────────────────────────────────────────────
 async function loadPi() {
   const start = parseInt(document.getElementById("start").value);
-  const end   = parseInt(document.getElementById("end").value);
+  const end = parseInt(document.getElementById("end").value);
 
   if (isNaN(start) || isNaN(end) || start < 1 || end < start) {
-    setOutput("Enter valid range");
+    document.getElementById("output").innerText = "Enter valid range";
     return;
   }
 
-  setStatus("Loading…");
-  setProgress(10);
-
   try {
     const byteStart = start + 1;
-    const byteEnd   = end   + 1;
+    const byteEnd = end + 1;
+
+    document.getElementById("status").innerText = "Loading...";
 
     const response = await fetch(PI_URL, {
-      headers: { "Range": `bytes=${byteStart}-${byteEnd}` }
+      headers: {
+        "Range": `bytes=${byteStart}-${byteEnd}`
+      }
     });
 
     const text = await response.text();
-    lastResult  = start === 1 ? "3." + text : text;
 
-    setProgress(60);
+    let result;
+
+    if (start === 1) {
+      result = "3." + text;
+    } else {
+      result = text;
+    }
+
+    lastResult = result;
+
     updateInfo(start, end);
-    await rebuildHighlights();
-    setProgress(100);
-    setTimeout(() => setProgress(0), 400);
+    document.getElementById("status").innerText = "Loaded";
+
+    applyHighlight();
 
   } catch (e) {
-    setStatus("Error (Range header may not be supported)");
-    setProgress(0);
+    document.getElementById("status").innerText =
+      "Error (Range may not be supported)";
   }
 }
 
-// ─── Highlights — run off main thread via inline Worker ────────────────────
-let worker = null;
-
-function getWorker() {
-  if (worker) return worker;
-  const src = `
-    self.onmessage = function(e) {
-      const { text, pattern } = e.data;
-      if (!pattern) { self.postMessage({ ranges: [], count: 0 }); return; }
-
-      const escaped = pattern.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
-      const re = new RegExp(escaped, 'g');
-      const ranges = [];
-      let m;
-      while ((m = re.exec(text)) !== null) {
-        ranges.push({ start: m.index, end: m.index + m[0].length });
-      }
-      self.postMessage({ ranges, count: ranges.length, patLen: pattern.length });
-    };
-  `;
-  worker = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
-  return worker;
-}
-
-async function rebuildHighlights() {
+function applyHighlight() {
   const pattern = document.getElementById("pattern").value;
-  currentMatch  = -1;
+  const output = document.getElementById("output");
 
-  if (!lastResult) return;
+  currentIndex = -1;
+  matchElements = [];
 
-  setStatus("Indexing…");
-
-  const result = await new Promise(resolve => {
-    const w = getWorker();
-    w.onmessage = e => resolve(e.data);
-    w.postMessage({ text: lastResult, pattern });
-  });
-
-  matchRanges = result.ranges;
-
-  // Stats
-  if (pattern) {
-    const digitsTotal   = lastResult.replace(".", "").length;
-    const digitsCovered = result.count * pattern.length;
-    const pct = digitsTotal > 0
-      ? ((digitsCovered / digitsTotal) * 100).toFixed(3) : 0;
-    setStatus(
-      `${result.count.toLocaleString()} match${result.count !== 1 ? "es" : ""} • ` +
-      `${digitsCovered.toLocaleString()} / ${digitsTotal.toLocaleString()} (${pct}%)`
-    );
-  } else {
-    setStatus("Loaded");
+  if (!pattern) {
+    output.innerText = lastResult;
+    document.getElementById("status").innerText = "Loaded";
+    return;
   }
 
-  buildRows();
-  renderVisible(true);
+  const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(escaped, "g");
+
+  const matches = lastResult.match(regex);
+  const count = matches ? matches.length : 0;
+
+  const digitsTotal = lastResult.replace(".", "").length;
+  const digitsCovered = count * pattern.length;
+
+  const percent = digitsTotal > 0
+    ? ((digitsCovered / digitsTotal) * 100).toFixed(3)
+    : 0;
+
+  const highlighted = lastResult.replace(regex, match =>
+    `<span class="highlight">${match}</span>`
+  );
+
+  output.innerHTML = highlighted;
+
+  matchElements = document.querySelectorAll(".highlight");
+
+  document.getElementById("status").innerText =
+    `${count.toLocaleString()} match${count !== 1 ? "es" : ""} • ${digitsCovered.toLocaleString()} out of ${digitsTotal.toLocaleString()} (${percent}%)`;
 }
 
-// ─── Virtual scroll helpers ─────────────────────────────────────────────────
-
-function buildRows() {
-  rowCache   = [];
-  rowOffsets = [];
-
-  let offset = 0;
-  for (let i = 0; i < lastResult.length; i += CHUNK_SIZE) {
-    rowOffsets.push(offset);
-    rowCache.push(lastResult.slice(i, i + CHUNK_SIZE));
-    offset += rowCache[rowCache.length - 1].length;
-  }
-  totalRows = rowCache.length;
-
-  // Each "row" wraps — estimate rendered lines per chunk based on container width
-  const containerWidth = wrap.clientWidth - 28; // subtract padding
-  const charWidth      = 9; // approx px per monospace char at 15px
-  const charsPerLine   = Math.max(1, Math.floor(containerWidth / charWidth));
-  const linesPerRow    = Math.ceil(CHUNK_SIZE / charsPerLine);
-  const totalHeight    = totalRows * linesPerRow * LINE_HEIGHT + 28; // +padding
-
-  spacer.style.height = totalHeight + "px";
-}
-
-// Binary-search to find which matchRanges overlap [lo, hi)
-function matchesInRange(lo, hi) {
-  const result = [];
-  // Simple linear scan within a chunk — matchRanges is sorted
-  let left = 0, right = matchRanges.length - 1;
-  // Find first index where end > lo
-  while (left < right) {
-    const mid = (left + right) >> 1;
-    if (matchRanges[mid].end <= lo) left = mid + 1;
-    else right = mid;
-  }
-  for (let i = left; i < matchRanges.length && matchRanges[i].start < hi; i++) {
-    result.push(i);
-  }
-  return result;
-}
-
-let lastRenderedTop = -1;
-
-function renderVisible(force = false) {
-  if (!lastResult) return;
-
-  const scrollTop = wrap.scrollTop;
-  if (!force && Math.abs(scrollTop - lastRenderedTop) < LINE_HEIGHT / 2) return;
-  lastRenderedTop = scrollTop;
-
-  const viewH = wrap.clientHeight;
-
-  // Which rows are visible?
-  // We need to map scrollTop → row. Use the same line-height estimate.
-  const containerWidth = wrap.clientWidth - 28;
-  const charWidth      = 9;
-  const charsPerLine   = Math.max(1, Math.floor(containerWidth / charWidth));
-  const linesPerRow    = Math.ceil(CHUNK_SIZE / charsPerLine);
-  const rowH           = linesPerRow * LINE_HEIGHT;
-
-  const firstRow = Math.max(0, Math.floor(scrollTop / rowH) - OVERSCAN);
-  const lastRow  = Math.min(totalRows - 1,
-                    Math.ceil((scrollTop + viewH) / rowH) + OVERSCAN);
-
-  // Position the output div at the top of the first rendered row
-  const topOffset = firstRow * rowH;
-  output.style.top = topOffset + "px";
-
-  // Build a DocumentFragment for the visible rows
-  const frag = document.createDocumentFragment();
-
-  for (let r = firstRow; r <= lastRow; r++) {
-    const rowText   = rowCache[r];
-    const rowOffset = rowOffsets[r];
-    const rowEnd    = rowOffset + rowText.length;
-
-    const indices = matchesInRange(rowOffset, rowEnd);
-
-    if (indices.length === 0) {
-      frag.appendChild(document.createTextNode(rowText));
-    } else {
-      let pos = 0;
-      for (const idx of indices) {
-        const m    = matchRanges[idx];
-        const lo   = m.start - rowOffset;
-        const hi   = m.end   - rowOffset;
-        const sLo  = Math.max(lo, 0);
-        const sHi  = Math.min(hi, rowText.length);
-
-        if (sLo > pos) {
-          frag.appendChild(document.createTextNode(rowText.slice(pos, sLo)));
-        }
-
-        const span = document.createElement("span");
-        span.className = "highlight" + (idx === currentMatch ? " active" : "");
-        span.dataset.matchIdx = idx;
-        span.textContent = rowText.slice(sLo, sHi);
-        frag.appendChild(span);
-        pos = sHi;
-      }
-      if (pos < rowText.length) {
-        frag.appendChild(document.createTextNode(rowText.slice(pos)));
-      }
-    }
-  }
-
-  output.replaceChildren(frag);
-}
-
-// ─── Find Next ─────────────────────────────────────────────────────────────
 function findNext() {
-  if (!matchRanges.length) return;
+  if (matchElements.length === 0) return;
 
-  currentMatch = (currentMatch + 1) % matchRanges.length;
+  if (currentIndex >= 0) {
+    matchElements[currentIndex].classList.remove("active");
+  }
 
-  // Scroll so the match is visible
-  const m = matchRanges[currentMatch];
-  scrollToChar(m.start);
+  currentIndex = (currentIndex + 1) % matchElements.length;
 
-  // Re-render, then highlight active span
-  renderVisible(true);
-  const active = output.querySelector(`[data-match-idx="${currentMatch}"]`);
-  if (active) active.scrollIntoView({ behavior: "smooth", block: "center" });
+  const el = matchElements[currentIndex];
+  el.classList.add("active");
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-function scrollToChar(charIdx) {
-  const containerWidth = wrap.clientWidth - 28;
-  const charWidth      = 9;
-  const charsPerLine   = Math.max(1, Math.floor(containerWidth / charWidth));
-  const linesPerRow    = Math.ceil(CHUNK_SIZE / charsPerLine);
-  const rowH           = linesPerRow * LINE_HEIGHT;
-
-  const rowIdx  = Math.floor(charIdx / CHUNK_SIZE);
-  const approxY = rowIdx * rowH;
-  wrap.scrollTop = Math.max(0, approxY - wrap.clientHeight / 2);
-}
-
-// ─── Simple output for non-pi messages ─────────────────────────────────────
-function setOutput(msg) {
-  lastResult  = "";
-  matchRanges = [];
-  rowCache    = [];
-  rowOffsets  = [];
-  totalRows   = 0;
-  spacer.style.height = "220px";
-  output.style.top = "0";
-  output.replaceChildren(document.createTextNode(msg));
-}
-
-// ─── Utilities ─────────────────────────────────────────────────────────────
 function updateInfo(start, end) {
   const digits = end - start + 1;
-  document.getElementById("counter").innerText = `Digits: ${digits.toLocaleString()}`;
-  document.getElementById("range").innerText   = `Range: ${start.toLocaleString()}–${end.toLocaleString()}`;
+
+  document.getElementById("counter").innerText =
+    `Digits: ${digits.toLocaleString()}`;
+
+  document.getElementById("range").innerText =
+    `Range: ${start.toLocaleString()}–${end.toLocaleString()}`;
 }
 
-function setStatus(msg) {
-  document.getElementById("status").innerText = msg;
-}
-
-function setProgress(pct) {
-  document.getElementById("progress-fill").style.width = pct + "%";
-}
-
-async function copyText() {
+function copyText() {
   if (!lastResult) return;
+
   const btn = document.querySelector(".copy-btn");
-  await navigator.clipboard.writeText(lastResult);
-  btn.classList.add("copied");
-  const orig = btn.innerText;
-  btn.innerText = "Copied!";
-  setStatus("Copied!");
-  setTimeout(() => { btn.classList.remove("copied"); btn.innerText = orig; }, 900);
+
+  navigator.clipboard.writeText(lastResult).then(() => {
+    btn.classList.add("copied");
+    const originalText = btn.innerText;
+    btn.innerText = "Copied!";
+
+    document.getElementById("status").innerText = "Copied!";
+
+    setTimeout(() => {
+      btn.classList.remove("copied");
+      btn.innerText = originalText;
+    }, 900);
+  });
 }
 </script>
+
 </body>
 </html>
